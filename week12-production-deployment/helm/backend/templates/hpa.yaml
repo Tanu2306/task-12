@@ -1,0 +1,52 @@
+{{/*
+helm/backend/templates/hpa.yaml
+─────────────────────────────────────────────────────────────────────────────
+HPA for the Spring Boot backend.
+Rendered only when autoscaling.enabled is true (default: true).
+Requires: minikube addons enable metrics-server
+─────────────────────────────────────────────────────────────────────────────
+*/}}
+{{- if .Values.autoscaling.enabled -}}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "shop-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "shop-backend.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "shop-backend.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    # ── CPU utilisation ──────────────────────────────────────────────────
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- if .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    # ── Memory utilisation (optional) ─────────────────────────────────
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  # ── Scaling behaviour ────────────────────────────────────────────────
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: {{ .Values.autoscaling.behavior.scaleDown.stabilizationWindowSeconds }}
+      policies:
+        {{- toYaml .Values.autoscaling.behavior.scaleDown.policies | nindent 8 }}
+    scaleUp:
+      stabilizationWindowSeconds: {{ .Values.autoscaling.behavior.scaleUp.stabilizationWindowSeconds }}
+      policies:
+        {{- toYaml .Values.autoscaling.behavior.scaleUp.policies | nindent 8 }}
+      selectPolicy: {{ .Values.autoscaling.behavior.scaleUp.selectPolicy }}
+{{- end }}

@@ -1,0 +1,19 @@
+{{/*
+helm/frontend/templates/service.yaml
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "shop-frontend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "shop-frontend.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "shop-frontend.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: {{ .Values.service.name }}
+      protocol: TCP
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.name }}

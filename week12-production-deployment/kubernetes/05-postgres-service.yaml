@@ -1,0 +1,24 @@
+# kubernetes/05-postgres-service.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# ClusterIP Service for PostgreSQL.
+# Only reachable from within the cluster (backend pods).
+# DNS: postgres-service.shop.svc.cluster.local
+# This name matches ConfigMap key DB_HOST: "postgres-service"
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: shop
+  labels:
+    app: postgres
+    component: database
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres              # Matches Deployment pod labels
+  ports:
+    - name: postgres
+      protocol: TCP
+      port: 5432
+      targetPort: postgres

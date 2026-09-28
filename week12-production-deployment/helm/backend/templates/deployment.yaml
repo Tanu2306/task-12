@@ -1,0 +1,102 @@
+{{/*
+helm/backend/templates/deployment.yaml
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shop-backend.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "shop-backend.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "shop-backend.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+    {{- if eq .Values.strategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.strategy.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.strategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "shop-backend.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "shop-backend.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: {{ .Values.service.name }}
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+
+          # ── Non-secret config from ConfigMap ───────────────────────
+          envFrom:
+            - configMapRef:
+                name: {{ printf "%s-config" (include "shop-backend.fullname" .) }}
+
+          # ── Secret values (DB credentials) ─────────────────────────
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "shop-backend.secretName" . }}
+                  key: {{ .Values.db.existingSecretKeys.password }}
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "shop-backend.secretName" . }}
+                  key: {{ .Values.db.existingSecretKeys.user }}
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "shop-backend.secretName" . }}
+                  key: {{ .Values.db.existingSecretKeys.name }}
+
+          # ── Health probes (Spring Boot Actuator endpoints) ─────────
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+
+          # ── Resource requests / limits ─────────────────────────────
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

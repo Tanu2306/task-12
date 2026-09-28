@@ -1,0 +1,72 @@
+# kubernetes/11-backend-hpa.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# HorizontalPodAutoscaler for the Spring Boot backend.
+# Uses autoscaling/v2 API (stable since Kubernetes 1.23).
+#
+# Prerequisites:
+#   minikube addons enable metrics-server
+#
+# Behaviour:
+#   • Scale OUT when average CPU > 70% across all backend pods
+#   • Scale IN  when CPU drops below 70% (with a 5-minute stabilization window
+#     to prevent thrashing)
+#   • Minimum 2 pods (matches Deployment replicas for HA)
+#   • Maximum 5 pods (student-safe cap)
+#
+# Load test to trigger scale-out (run in a separate terminal):
+#   kubectl run load-test --image=busybox --restart=Never -n shop -- \
+#     /bin/sh -c "while true; do wget -qO- http://backend-service:8080/api/products; done"
+# Or from outside the cluster via Ingress:
+#   while true; do curl -s http://shop.local/api/products > /dev/null; done
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: shop
+  labels:
+    app: backend
+    component: autoscaler
+spec:
+  # ── Target Deployment ────────────────────────────────────────────────────
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+
+  # ── Replica bounds ───────────────────────────────────────────────────────
+  minReplicas: 2
+  maxReplicas: 5
+
+  # ── Metrics ──────────────────────────────────────────────────────────────
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70    # Scale out when average CPU > 70%
+
+    # Optional: also scale on memory (commented out – requires custom metrics)
+    # - type: Resource
+    #   resource:
+    #     name: memory
+    #     target:
+    #       type: Utilization
+    #       averageUtilization: 80
+
+  # ── Scaling behaviour (prevents thrashing) ───────────────────────────────
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   # Wait 5 min before scaling in
+      policies:
+        - type:          Pods
+          value:         1              # Remove at most 1 pod per period
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0     # Scale out immediately
+      policies:
+        - type:          Pods
+          value:         2              # Add at most 2 pods per period
+          periodSeconds: 60
+      selectPolicy: Max

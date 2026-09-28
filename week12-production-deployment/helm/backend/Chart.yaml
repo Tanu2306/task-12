@@ -1,0 +1,19 @@
+apiVersion: v2
+name: shop-backend
+description: >
+  Helm chart for the ShopLocal Spring Boot backend API.
+  Deploys the REST API with PostgreSQL connectivity, Actuator health probes,
+  Prometheus scraping, and HPA-based CPU autoscaling.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - backend
+  - spring-boot
+  - java
+  - api
+  - shop
+  - week12
+maintainers:
+  - name: Student DevOps
+    email: student@example.com

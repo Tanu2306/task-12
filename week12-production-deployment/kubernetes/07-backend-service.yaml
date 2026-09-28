@@ -1,0 +1,23 @@
+# kubernetes/07-backend-service.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# ClusterIP Service for the Spring Boot backend.
+# The Ingress controller routes /api → backend-service:8080.
+# DNS: backend-service.shop.svc.cluster.local
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: shop
+  labels:
+    app: backend
+    component: api
+spec:
+  type: ClusterIP
+  selector:
+    app: backend               # Matches backend Deployment pod labels
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: http

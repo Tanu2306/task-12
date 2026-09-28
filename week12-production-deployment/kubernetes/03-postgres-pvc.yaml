@@ -1,0 +1,21 @@
+# kubernetes/03-postgres-pvc.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# PersistentVolumeClaim for PostgreSQL data.
+# Minikube provides a "standard" StorageClass backed by hostPath.
+# In production (EKS/GKE) replace storageClassName with "gp3" or "pd-ssd".
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: shop
+  labels:
+    app: postgres
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce          # Single-node write (fine for Postgres single replica)
+  storageClassName: standard # Minikube default StorageClass
+  resources:
+    requests:
+      storage: 2Gi

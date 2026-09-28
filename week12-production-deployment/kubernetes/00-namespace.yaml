@@ -1,0 +1,28 @@
+# kubernetes/00-namespace.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# APPLY ORDER (run these in sequence):
+#   1. kubectl apply -f kubernetes/00-namespace.yaml
+#   2. kubectl apply -f kubernetes/01-configmap.yaml
+#   3. kubectl apply -f kubernetes/02-secrets.yaml
+#   4. kubectl apply -f kubernetes/03-postgres-pvc.yaml
+#   5. kubectl apply -f kubernetes/04-postgres-deployment.yaml
+#   6. kubectl apply -f kubernetes/05-postgres-service.yaml
+#   7. kubectl apply -f kubernetes/06-backend-deployment.yaml
+#   8. kubectl apply -f kubernetes/07-backend-service.yaml
+#   9. kubectl apply -f kubernetes/08-frontend-deployment.yaml
+#  10. kubectl apply -f kubernetes/09-frontend-service.yaml
+#  11. kubectl apply -f kubernetes/10-ingress.yaml
+#  12. kubectl apply -f kubernetes/11-backend-hpa.yaml
+#
+# Or apply the whole directory at once (K8s handles dependency order via
+# readiness probes and restartPolicy):
+#   kubectl apply -f kubernetes/
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+  labels:
+    name: shop
+    project: week12-production-deployment
+    managed-by: kubectl

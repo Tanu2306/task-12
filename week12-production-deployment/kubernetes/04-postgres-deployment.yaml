@@ -1,0 +1,122 @@
+# kubernetes/04-postgres-deployment.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# Single-replica PostgreSQL 15 deployment.
+# Uses the PVC (03-postgres-pvc.yaml) and Secret (02-secrets.yaml).
+# imagePullPolicy: IfNotPresent – suitable for pulling from Docker Hub once
+# and caching on the Minikube node.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: shop
+  labels:
+    app: postgres
+    component: database
+    version: "15"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  strategy:
+    type: Recreate            # Required for RWO PVC – only one pod may mount at a time
+  template:
+    metadata:
+      labels:
+        app: postgres
+        component: database
+      annotations:
+        # Prometheus will NOT scrape postgres directly here;
+        # a postgres-exporter sidecar would be needed for full metrics.
+        prometheus.io/scrape: "false"
+    spec:
+      # ── Security: run as non-root (postgres image supports uid 999) ───
+      securityContext:
+        runAsUser: 999
+        fsGroup: 999
+
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+
+          # ── Environment from Secret & ConfigMap ─────────────────────
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: shop-secrets
+                  key: DB_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: shop-secrets
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: shop-secrets
+                  key: DB_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+
+          # ── Resource requests / limits ───────────────────────────────
+          resources:
+            requests:
+              cpu:    "250m"
+              memory: "256Mi"
+            limits:
+              cpu:    "500m"
+              memory: "512Mi"
+
+          # ── Probes ───────────────────────────────────────────────────
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - shopuser
+                - -d
+                - shopdb
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - shopuser
+                - -d
+                - shopdb
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # ── Volume mounts ────────────────────────────────────────────
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+        # Mount init.sql as a ConfigMap so it runs on first start.
+        # Create with: kubectl create configmap postgres-init \
+        #   --from-file=init.sql=database/init.sql -n shop
+        - name: init-sql
+          configMap:
+            name: postgres-init

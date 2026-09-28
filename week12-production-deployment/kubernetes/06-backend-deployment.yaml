@@ -1,0 +1,137 @@
+# kubernetes/06-backend-deployment.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# Spring Boot backend – 2 replicas.
+#
+# IMAGE NOTE (Minikube):
+#   Build the image inside Minikube's Docker daemon so it is available
+#   without a registry push:
+#     eval $(minikube docker-env)
+#     docker build -t shop-backend:latest ./backend
+#   Then imagePullPolicy: Never ensures Kubernetes uses the local image.
+#
+# Liveness  probe → /actuator/health/liveness  (Spring Boot Actuator)
+# Readiness probe → /actuator/health/readiness (Spring Boot Actuator)
+#
+# Prometheus scraping is enabled via pod annotations.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: shop
+  labels:
+    app: backend
+    component: api
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0          # Zero-downtime rolling deploy
+  template:
+    metadata:
+      labels:
+        app: backend
+        component: api
+        version: "1.0.0"
+      annotations:
+        # ── Prometheus auto-discovery annotations ────────────────────
+        prometheus.io/scrape: "true"
+        prometheus.io/path:   "/actuator/prometheus"
+        prometheus.io/port:   "8080"
+    spec:
+      # ── Security context ─────────────────────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001          # Non-root user set in the backend Dockerfile
+        fsGroup: 1001
+
+      # ── Graceful shutdown: allow 30 s for in-flight requests ─────────
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: backend
+          # Use the image built inside Minikube's Docker daemon.
+          # Change to ghcr.io/<org>/shop-backend:<sha> for CD deploys.
+          image: shop-backend:latest
+          imagePullPolicy: Never   # Minikube: use locally built image
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # ── Environment variables ─────────────────────────────────
+          envFrom:
+            - configMapRef:
+                name: shop-config  # DB_HOST, DB_PORT, DB_NAME, DB_USER, JAVA_OPTS
+          env:
+            # Override DB_USER and DB_PASSWORD from Secret
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: shop-secrets
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: shop-secrets
+                  key: DB_PASSWORD
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: shop-secrets
+                  key: DB_NAME
+            # JVM: honour container CPU/memory limits
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+
+          # ── Resource requests / limits ─────────────────────────────
+          resources:
+            requests:
+              cpu:    "250m"
+              memory: "384Mi"
+            limits:
+              cpu:    "750m"
+              memory: "768Mi"
+
+          # ── Liveness probe (Spring Actuator) ───────────────────────
+          # Restarts the pod if the JVM is deadlocked or OOM.
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 60   # Give Spring Boot time to start
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ── Readiness probe (Spring Actuator) ─────────────────────
+          # Removes pod from Service endpoints until DB connection is ready.
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ── Startup probe ──────────────────────────────────────────
+          # Gives slow starts (first init, schema validation) more time
+          # before liveness kicks in (60s + 10*10s = 160s max).
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 10
+            timeoutSeconds: 5

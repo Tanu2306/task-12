@@ -1,0 +1,134 @@
+# prometheus.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Prometheus scrape configuration for the ShopLocal e-commerce demo.
+#
+# TWO scrape variants are included and clearly labelled:
+#   1. DOCKER COMPOSE  – static target pointing to the "backend" container name
+#   2. KUBERNETES      – uses kubernetes_sd_configs with pod annotation filtering
+#
+# To use this file stand-alone with Docker Compose:
+#   docker run -p 9090:9090 \
+#     -v $(pwd)/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml \
+#     prom/prometheus
+# ─────────────────────────────────────────────────────────────────────────────
+
+global:
+  scrape_interval:     15s   # How often to scrape each target
+  evaluation_interval: 15s   # How often to evaluate alerting rules
+  scrape_timeout:      10s
+
+  # Labels added to all time-series collected by this Prometheus instance
+  external_labels:
+    environment: local
+    project:     week12-shop
+
+# ── Alertmanager (optional – placeholder) ────────────────────────────────────
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# ── Rule files (optional) ────────────────────────────────────────────────────
+# rule_files:
+#   - "alert_rules.yml"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCRAPE CONFIGS
+# ─────────────────────────────────────────────────────────────────────────────
+scrape_configs:
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 1. DOCKER COMPOSE TARGET
+  #    Uses static_configs – "backend" resolves to the backend container
+  #    via the Docker Compose internal DNS.
+  #    Works when Prometheus itself runs inside the same Compose network.
+  # ══════════════════════════════════════════════════════════════════════════
+  - job_name: 'spring-boot-backend-docker'
+    # Only active when running via Docker Compose.
+    # Comment out (or remove) this block when deploying to Kubernetes.
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - 'backend:8080'           # Docker Compose service name + port
+        labels:
+          service:     'shop-backend'
+          environment: 'docker-compose'
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 2. KUBERNETES POD AUTO-DISCOVERY
+  #    Uses kubernetes_sd_configs to find pods in the "shop" namespace that
+  #    carry the annotation:
+  #      prometheus.io/scrape: "true"
+  #
+  #    Add these annotations to the backend Deployment pod template:
+  #      annotations:
+  #        prometheus.io/scrape: "true"
+  #        prometheus.io/path:   "/actuator/prometheus"
+  #        prometheus.io/port:   "8080"
+  #
+  #    Requires Prometheus to run inside the cluster with a ServiceAccount
+  #    that has "get/list/watch" on pods.
+  #    Comment out this block when using Docker Compose only.
+  # ══════════════════════════════════════════════════════════════════════════
+  - job_name: 'spring-boot-backend-kubernetes'
+    # Comment this entire block out for Docker Compose usage.
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - shop                   # Kubernetes namespace (matches kubernetes/namespace.yaml)
+
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+
+    relabel_configs:
+      # Only scrape pods that have the annotation prometheus.io/scrape=true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: 'true'
+
+      # Override the metrics path from annotation (if set)
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+
+      # Override the scrape port from annotation (if set)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: '$1:$2'
+        target_label: __address__
+
+      # Carry useful pod metadata as labels on every time-series
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: replace
+        target_label: app
+
+      - source_labels: [__meta_kubernetes_pod_label_version]
+        action: replace
+        target_label: version
+
+      # Drop any pods without a running phase
+      - source_labels: [__meta_kubernetes_pod_phase]
+        action: drop
+        regex: 'Pending|Succeeded|Failed'
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 3. PROMETHEUS SELF-SCRAPE
+  #    Always active – lets Prometheus monitor its own health.
+  # ══════════════════════════════════════════════════════════════════════════
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'

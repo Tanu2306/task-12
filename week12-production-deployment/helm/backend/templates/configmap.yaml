@@ -1,0 +1,20 @@
+{{/*
+helm/backend/templates/configmap.yaml
+Non-sensitive configuration for the backend Deployment.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-config" (include "shop-backend.fullname" .) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "shop-backend.labels" . | nindent 4 }}
+data:
+  # ── Database connection (non-secret) ──────────────────────────────────
+  DB_HOST: {{ .Values.db.host | quote }}
+  DB_PORT: {{ .Values.db.port | quote }}
+
+  # ── Application settings ───────────────────────────────────────────────
+  {{- range $key, $value := .Values.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

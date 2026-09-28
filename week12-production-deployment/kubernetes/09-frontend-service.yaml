@@ -1,0 +1,23 @@
+# kubernetes/09-frontend-service.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# ClusterIP Service for the React + Nginx frontend.
+# The Ingress controller routes / → frontend-service:80.
+# DNS: frontend-service.shop.svc.cluster.local
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: shop
+  labels:
+    app: frontend
+    component: ui
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend              # Matches frontend Deployment pod labels
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http
